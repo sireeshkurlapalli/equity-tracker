@@ -1,7 +1,10 @@
 'use client';
 
 import { Scrip, Pnl, Recommendation } from '@/types';
+import { getRecommendation } from '@/lib/recommendation';
 import { Badge, Button } from './ui';
+import { Card } from './ui';
+import { AladdinRecommendation } from '@/lib/aladdin';
 import { useEffect, useState } from 'react';
 
 interface Props {
@@ -16,6 +19,7 @@ export function ScripCard({ scrip, onRemove, onNavigate }: Props) {
     adjustedPnl: 0, adjustedPnlPercent: 0,
   });
   const [rec, setRec] = useState<Recommendation | null>(null);
+  const [aladdinRec, setAladdinRec] = useState<AladdinRecommendation | null>(null);
   const [loadingRec, setLoadingRec] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -39,8 +43,11 @@ export function ScripCard({ scrip, onRemove, onNavigate }: Props) {
     async function fetchRec() {
       setLoadingRec(true);
       try {
-        const r = await getRecommendation(scrip.symbol, scrip.name);
-        if (!cancelled) setRec(r);
+        const [r, al] = await Promise.all([
+          getRecommendation(scrip.symbol, scrip.name),
+          (await import('@/lib/aladdin').then(m => m.buildAladdinRecommendation(scrip.symbol, scrip.name, []))),
+        ]);
+        if (!cancelled) { setRec(r); setAladdinRec(al); }
       } finally {
         if (!cancelled) setLoadingRec(false);
       }
@@ -126,172 +133,177 @@ export function ScripCard({ scrip, onRemove, onNavigate }: Props) {
         </div>
       )}
 
-      {/* Expanded: Recommendation */}
+      {/* Expanded: Aladdin-style analysis */}
       {expanded && (
-        <div className="px-4 pb-4 pt-3 border-t border-[var(--border)] grid grid-cols-1 gap-3">
-          <div>
-            <p className="text-xs text-[var(--text-muted)] mb-2">ANALYST RECOMMENDATION</p>
-            {loadingRec ? (
-              <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                <span className="inline-block w-3 h-3 rounded-full bg-[var(--blue)] animate-pulse-soft" />
-                Loading recommendation...
+        <div className="px-4 pb-4 pt-3 border-t border-[var(--border)]">
+          {loadingRec ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-[var(--blue)] animate-pulse-soft" />
+              Loading Aladdin-style analysis...
+            </div>
+          ) : aladdinRec ? (
+            <>
+              {/* Score + action */}
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={aladdinRec.newsSentimentLabel === 'Bullish' ? 'green' : aladdinRec.newsSentimentLabel === 'Bearish' ? 'red' : 'amber'}>
+                  News: {aladdinRec.newsSentimentLabel}
+                </Badge>
+                <Badge variant={aladdinRec.action === 'Strong Buy' || aladdinRec.action === 'Buy' ? 'green' : aladdinRec.action === 'Strong Sell' || aladdinRec.action === 'Sell' ? 'red' : 'amber'}>
+                  {aladdinRec.action}
+                </Badge>
+                <span className="text-xs text-[var(--text-muted)] ml-auto font-mono">Score: {aladdinRec.score.toFixed(2)} / 1.00</span>
+                <span className="text-xs text-[var(--text-muted)]">Confidence: {(aladdinRec.confidence * 100).toFixed(0)}%</span>
               </div>
-            ) : rec ? (
-              <>
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant={rec.sentiment === 'Bullish' ? 'green' : rec.sentiment === 'Bearish' ? 'red' : 'amber'}>
-                    {rec.sentiment}
+
+              {/* Macro regime bar */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-[var(--text-muted)] font-medium">🌍 Macro Regime</p>
+                  <Badge variant={aladdinRec.regime.overallRiskAppetite === 'Risk-On' ? 'green' : aladdinRec.regime.overallRiskAppetite === 'Risk-Off' ? 'red' : 'amber'}>
+                    {aladdinRec.regime.phase} · {aladdinRec.regime.overallRiskAppetite}
                   </Badge>
-                  <Badge variant={rec.action === 'Strong Buy' || rec.action === 'Buy' ? 'green' : rec.action === 'Strong Sell' || rec.action === 'Sell' ? 'red' : 'amber'}>
-                    {rec.action}
-                  </Badge>
-                  <span className="text-xs text-[var(--text-muted)] ml-auto">Score: {rec.score.toFixed(2)}</span>
                 </div>
-                <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
-                  <p className="text-xs text-[var(--text-muted)] mb-1.5">📉 Geopolitical & Market Factors</p>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">{aladdinRec.regime.gdpGrowth}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {aladdinRec.regime.keyThemes.slice(0, 4).map((t, i) => (
+                    <span key={i} className="text-[10px] bg-[var(--bg-card)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded border border-[var(--border)]">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Confidence bar */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-xs text-[var(--text-muted)] font-medium">📊 Model Confidence</p>
+                  <span className="text-xs font-mono text-[var(--text-muted)]">{(aladdinRec.confidence * 100).toFixed(0)}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-[var(--bg-card)] overflow-hidden border border-[var(--border)]">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[var(--amber)] via-[var(--blue)] to-[var(--green)] transition-all" style={{ width: `${aladdinRec.confidence * 100}%` }} />
+                </div>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">Blend of news sentiment, factor tilt, sector outlook, and geopolitical overlay</p>
+              </div>
+
+              {/* Geopolitical overlay */}
+              {aladdinRec.geopoliticalFactors.length > 0 && (
+                <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                  <p className="text-xs text-[var(--text-muted)] font-medium mb-1.5">🌏 Geopolitical & Factor Overlay</p>
+                  <div className="space-y-1.5">
+                    {aladdinRec.geopoliticalFactors.map((g, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className={g.direction === '+' ? 'text-[var(--green)] shrink-0' : g.direction === '-' ? 'text-[var(--red)] shrink-0' : 'text-[var(--amber)] shrink-0'}>
+                          {g.direction}
+                        </span>
+                        <div>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            <span className="font-medium text-[var(--text-primary)]">{g.region}</span> · {g.theme}
+                            <span className="text-[var(--text-muted)] ml-1">({g.impact}, {g.urgency})</span>
+                          </p>
+                          <p className="text-[11px] text-[var(--text-muted)]">{g.note}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sector outlook */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <p className="text-xs text-[var(--text-muted)] font-medium mb-1.5">🏭 Sector Outlook — {aladdinRec.sector}</p>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <div className="text-center">
+                    <p className="text-[10px] text-[var(--text-muted)]">30 Days</p>
+                    <p className={`text-xs font-semibold ${
+                      aladdinRec.sectorOutlook.outlook30d === 'Positive' ? 'text-[var(--green)]' :
+                      aladdinRec.sectorOutlook.outlook30d === 'Negative' ? 'text-[var(--red)]' : 'text-[var(--amber)]'
+                    }`}>{aladdinRec.sectorOutlook.outlook30d}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-[var(--text-muted)]">90 Days</p>
+                    <p className={`text-xs font-semibold ${
+                      aladdinRec.sectorOutlook.outlook90d === 'Positive' ? 'text-[var(--green)]' :
+                      aladdinRec.sectorOutlook.outlook90d === 'Negative' ? 'text-[var(--red)]' : 'text-[var(--amber)]'
+                    }`}>{aladdinRec.sectorOutlook.outlook90d}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-[var(--text-muted)]">Long Term</p>
+                    <p className={`text-xs font-semibold ${
+                      aladdinRec.sectorOutlook.outlookLong === 'Positive' ? 'text-[var(--green)]' :
+                      aladdinRec.sectorOutlook.outlookLong === 'Negative' ? 'text-[var(--red)]' : 'text-[var(--amber)]'
+                    }`}>{aladdinRec.sectorOutlook.outlookLong}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* News feed */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <p className="text-xs text-[var(--text-muted)] font-medium mb-1.5">📰 Market News & Sentiment</p>
+                <p className="text-xs text-[var(--text-secondary)] mb-2 italic">
+                  Blended news sentiment: {aladdinRec.newsSentimentLabel} ({(aladdinRec.newsSentiment * 100).toFixed(0)}/100)
+                  {aladdinRec.newsSource !== 'EquityPulse' ? ` · Source: ${aladdinRec.newsSource}` : ' · Curated Aladdin analysis'}
+                </p>
+                <ul className="space-y-1">
+                  {aladdinRec.catalysts.slice(0, 3).map((c, i) => (
+                    <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
+                      <span className="text-[var(--blue)] shrink-0">▸</span>
+                      <span>{c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Factor tilt */}
+              {aladdinRec.factorTilt && (
+                <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                  <p className="text-xs text-[var(--text-muted)] font-medium mb-1.5">📊 Factor Tilt — {aladdinRec.factorTilt.factor}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={aladdinRec.factorTilt.tilt === 'Overweight' ? 'green' : aladdinRec.factorTilt.tilt === 'Underweight' ? 'red' : 'amber'}>
+                      {aladdinRec.factorTilt.tilt}
+                    </Badge>
+                    <span className="text-xs text-[var(--text-secondary)]">{aladdinRec.factorTilt.horizon} · Confidence: {(aladdinRec.factorTilt.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)]">{aladdinRec.factorTilt.rationale}</p>
+                </div>
+              )}
+
+              {/* Position advice */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <p className="text-xs text-[var(--text-muted)] font-medium mb-1.5">🎯 Position Sizing Advice</p>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{aladdinRec.positionSizingAdvice}</p>
+              </div>
+
+              {/* Action rationale */}
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mb-2">
+                <p className="text-xs text-[var(--text-muted)] font-medium mb-1">📝 Why {aladdinRec.action}?</p>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{aladdinRec.actionRationale}</p>
+              </div>
+
+              {/* Risks */}
+              {aladdinRec.risks.length > 0 && (
+                <div className="bg-[var(--red-dim)] rounded-lg p-3 border border-[var(--red)]">
+                  <p className="text-xs text-[var(--red)] font-medium mb-1.5">▼ Key Risks</p>
                   <ul className="space-y-1">
-                    {rec.geopoliticalFactors.map((f, i) => (
+                    {aladdinRec.risks.slice(0, 4).map((r, i) => (
                       <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-1.5">
-                        <span className={f.startsWith('+') ? 'text-[var(--green)]' : 'text-[var(--red)]'}>●</span>
-                        <span>{f}</span>
+                        <span className="text-[var(--red)] shrink-0">•</span>
+                        <span>{r}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mt-2">
-                  <p className="text-xs text-[var(--text-muted)] mb-1.5">📰 Recent News & Analyst Views</p>
-                  <ul className="space-y-1">
-                    {rec.newsHeadlines.map((h, i) => (
-                      <li key={i} className="text-xs text-[var(--text-secondary)]">• {h}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)] mt-2">
-                  <p className="text-xs text-[var(--text-muted)] mb-1">🏭 Sector View</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{rec.sectorImpact}</p>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">No data available. Add a current price to get recommendations.</p>
-            )}
-          </div>
+              )}
+
+              <p className="text-[10px] text-[var(--text-muted)] mt-2 leading-relaxed">
+                Aladdin-style analysis blends market news (India focus) with macro regime, factor tilts, sector outlook, and geopolitical overlay.
+                For informational purposes only; not SEBI-registered investment advice.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)] py-2">No analysis data available.</p>
+          )}
         </div>
       )}
     </div>
   );
-}
-
-async function getRecommendation(symbol: string, name: string): Promise<Recommendation> {
-  const headlines = await fetchNewsForSymbol(symbol, name);
-  const sentiment = computeSentiment(headlines);
-  const sectorImpact = sectorAnalysis(symbol);
-  const geopoliticalFactors = getGeopoliticalFactors(symbol);
-
-  const score = (sentiment === 'Bullish' ? 0.6 : sentiment === 'Bearish' ? -0.6 : 0)
-    + (geopoliticalFactors.filter(f => f.startsWith('+')).length * 0.15)
-    - (geopoliticalFactors.filter(f => f.startsWith('-')).length * 0.15);
-
-  const clamped = Math.max(-1, Math.min(1, score));
-
-  let action: Recommendation['action'];
-  let reasons: string[] = [];
-
-  if (clamped >= 0.5) { action = 'Strong Buy'; reasons.push('Strong positive momentum across news and geopolitical factors.'); }
-  else if (clamped >= 0.15) { action = 'Buy'; reasons.push('Moderate positive outlook; consider accumulating on dips.'); }
-  else if (clamped >= -0.15) { action = 'Hold'; reasons.push('Market-neutral signals; monitor for catalysts.'); }
-  else if (clamped >= -0.5) { action = 'Sell'; reasons.push('Softening sentiment; review position size.'); }
-  else { action = 'Strong Sell'; reasons.push('Negative news flow and adverse geopolitical headwinds.'); }
-
-  reasons.push(...headlines.slice(0, 3).map(h => `News: ${h}`));
-  if (sectorImpact) reasons.push(`Sector: ${sectorImpact}`);
-  geopoliticalFactors.forEach(f => reasons.push(`Geo: ${f}`));
-
-  return {
-    score: clamped,
-    action,
-    reasons,
-    newsHeadlines: headlines,
-    sentiment,
-    sectorImpact,
-    geopoliticalFactors,
-  };
-}
-
-async function fetchNewsForSymbol(symbol: string, name: string): Promise<string[]> {
-  const sector = sectorFromSymbol(symbol);
-  return [
-    `${name} (${symbol}) Q3 results expected to beat consensus estimates`,
-    `Foreign institutional investors turn net buyers in ${sector} sector`,
-    `Govt policy push expected to boost ${sector} demand in H2 FY26`,
-    `${name} trades above 20-day and 50-day moving averages`,
-    `${symbol} near-term resistance at recent high; support firm at 200-DMA`,
-  ];
-}
-
-function sectorFromSymbol(symbol: string): string {
-  const map: Record<string, string> = {
-    RELIANCE: 'Energy & Telecom', HDFCBANK: 'Banking', ICICIBANK: 'Banking',
-    SBIN: 'Banking', KOTAKBANK: 'Banking', AXISBANK: 'Banking',
-    TCS: 'IT Services', INFY: 'IT Services', WIPRO: 'IT Services', HCLTECH: 'IT Services',
-    TATASTEEL: 'Metals', JSWSTEEL: 'Metals', HINDALCO: 'Metals',
-    LT: 'Corporates', TECHM: 'IT Services',
-    POWERGRID: 'Power', NTPC: 'Power',
-    NESTLEIND: 'FMCG', HINDUNILVR: 'FMCG', ITC: 'FMCG',
-    MARUTI: 'Auto',
-    'M&M': 'Auto',
-    'BAJAJ-AUTO': 'Auto',
-    SUNPHARMA: 'Pharma', CIPLA: 'Pharma', DRREDDY: 'Pharma',
-    ULTRACEMCO: 'Cement', GRASIM: 'Cement', COALINDIA: 'Mining',
-    BAJFINANCE: 'NBFC', BAJAJFINSV: 'NBFC',
-    ADANIENT: 'Infrastructure', ADANIPORTS: 'Infrastructure',
-    TITAN: 'Consumer Discretionary', EICHERMOT: 'Auto Ancillary',
-    INDIGO: 'Aviation',
-  };
-  return map[symbol] || 'General';
-}
-
-function sectorAnalysis(symbol: string): string {
-  const sector = sectorFromSymbol(symbol);
-  const views: Record<string, string> = {
-    'Banking': 'Banking well-capitalized; credit growth picking up. RBI supportive. Watch NIM compression.',
-    'IT Services': 'IT facing macro headwinds but deal pipeline stabilizing. GenAI tailwinds emerging.',
-    'FMCG': 'Defensive; rural demand recovery expected. Pricing power intact for leaders.',
-    'Metals': 'Commodity prices volatile on China demand. Domestic infra push provides support.',
-    'Auto': 'PV sales growing; EV transition accelerating. Margin pressure from input costs.',
-    'Pharma': 'US FDA scrutiny easing. Generic pipeline strong for select players.',
-    'Power': 'Coal supply stabilizing. Renewable energy push creates long-term tailwind.',
-    'Energy & Telecom': 'Reliance refining margin under pressure; telecom ARPU rising. Retail & new energy in pipeline.',
-    'Cement': 'Capacity expansion underway. Real estate demand supports volume growth.',
-    'NBFC': 'Asset quality improving. Funding costs remain elevated.',
-    'Consumer Discretionary': 'Premiumization trend intact. Watch rural consumption.',
-    'Aviation': 'Passenger traffic recovering. Fuel cost is key variable.',
-  };
-  return views[sector] || `Sector analysis for ${sector} — monitor quarterly results and macro indicators.`;
-}
-
-function getGeopoliticalFactors(symbol: string): string[] {
-  return [
-    '+ India Q3 GDP growth expected at 6.5-7.0% — supportive for cyclicals',
-    '+ FII flows turning positive in recent sessions — broad market support',
-    '+ Government capex budget allocation for infra — positive for industrials',
-    '- Global crude oil volatility — watch input cost pressure on margins',
-    '- US Fed rate path uncertainty — could impact FII flows and INR',
-    '- Geopolitical tensions in Middle East — risk-off sentiment for EM',
-    '+ India-China border trade normalization talks — potential positive for select sectors',
-    '- Domestic inflation sticky above RBI target — rate cut timing uncertain',
-  ];
-}
-
-function computeSentiment(headlines: string[]): 'Bullish' | 'Neutral' | 'Bearish' {
-  const positiveWords = ['beat', 'buyers', 'boost', 'above', 'positive', 'stabiliz', 'growth', 'tailwind', 'recovery', 'rising', 'turn'];
-  const negativeWords = ['pressure', 'volatil', 'scrutiny', 'concern', 'headwind', 'weak', 'fall', 'drop', 'risk', 'uncertainty', 'margin'];
-  let score = 0;
-  for (const h of headlines) {
-    const lower = h.toLowerCase();
-    for (const w of positiveWords) if (lower.includes(w)) score++;
-    for (const w of negativeWords) if (lower.includes(w)) score--;
-  }
-  if (score > 2) return 'Bullish';
-  if (score < -2) return 'Bearish';
-  return 'Neutral';
 }

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EquityPulse — Connect GitHub to Vercel</title>
+<style>
+  :root {
+    --bg-primary: #0b0e14;
+    --bg-secondary: #131822;
+    --bg-card: #1a2030;
+    --bg-card-hover: #1f2738;
+    --border: #242d3d;
+    --border-light: #2d3648;
+    --text-primary: #e8edf5;
+    --text-secondary: #8892a8;
+    --text-muted: #5a6478;
+    --green: #00d46a;
+    --green-dim: rgba(0, 212, 106, 0.12);
+    --red: #ff4757;
+    --red-dim: rgba(255, 71, 87, 0.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59, 130, 246, 0.12);
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: var(--shadow);
+  }
+  .card h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .card p.sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+  .step {
+    display: flex;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--blue-dim);
+    color: var(--blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .step-body h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .step-body p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .step-body code {
+    background: var(--bg-secondary);
+    color: var(--green);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .link-row a {
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .link-row a:hover { text-decoration: underline; }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+  }
+  .note {
+    background: var(--blue-dim);
+    border-left: 3px solid var(--blue);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .note strong { color: var(--text-primary); }
+  .token-box {
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+  .token-box .token-val {
+    color: var(--amber);
+    word-break: break-all;
+  }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    text-decoration: none;
+  }
+  .action-btn:hover { opacity: 0.9; }
+  .status-badge {
+    display: inline-block;
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid var(--green);
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <span class="status-badge">✓ GitHub repo connected</span>
+    <h1>EquityPulse — Git Setup</h1>
+    <p class="sub">Your repo is pushed. Connect it to Vercel for auto-deploys on every push.</p>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Open Vercel project settings</h3>
+        <p>Go to your project's settings page in the browser.</p>
+        <div class="link-row">
+          <a href="https://vercel.com/sireeshkk-3651/equity-tracker/settings" target="_blank">
+            → https://vercel.com/sireeshkk-3651/equity-tracker/settings
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Connect the Git repository</h3>
+        <p>Scroll to the <strong>Git Repository</strong> section and click <strong>Connect Git Repository</strong> (or <strong>Add Git Repository</strong>).</p>
+        <p>Find <code>sireeshkurlapalli/equity-tracker</code> in the list and click <strong>Connect</strong>.</p>
+        <div class="note">
+          <strong>Don't see the repo?</strong> Make sure you're logged into Vercel with the same GitHub account that owns the repo. You can also install Vercel's GitHub App at <a href="https://github.com/apps/vercel" target="_blank">github.com/apps/vercel</a> first.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Configure & deploy</h3>
+        <p>Leave all settings as auto-detected:</p>
+        <code style="display:block;margin-top:6px;">Branch: main  |  Build: npm run build  |  Output: Next.js default</code>
+        <p>Click <strong>Deploy</strong>. Vercel installs its GitHub App and enables auto-deploys.</p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="step">
+      <div class="step-num">✓</div>
+      <div class="step-body">
+        <h3>Test it</h3>
+        <p>Make a small change, commit, and push:</p>
+        <code style="display:block;margin-top:6px;">git commit -m "test" && git push origin main</code>
+        <p>Check <a href="https://vercel.com/sireeshkk-3651/equity-tracker" target="_blank">the dashboard</a> — a new deployment appears within ~30 seconds.</p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="note">
+      <strong>Your GitHub Personal Access Token (PAT)</strong><br>
+      You used: <span class="token-val" style="font-family:'JetBrains Mono',monospace;">[REDACTED]</span>
+      <br><br>
+      To create a new one: <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> → Generate new token (classic) → check <strong>repo</strong> scope → Copy.
+      <br><br>
+      To revoke: same page → find the token → Revoke.
+    </div>
+
+    <a href="https://vercel.com/sireeshkk-3651/equity-tracker/settings" class="action-btn" target="_blank">
+      Open Vercel Settings →
+    </a>
+  </div>
+</body>
+</html>

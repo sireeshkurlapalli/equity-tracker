@@ -28,6 +28,16 @@ export interface Recommendation {
   sentiment: 'Bullish' | 'Neutral' | 'Bearish';
   sectorImpact: string;
   geopoliticalFactors: string[];
+  _meta?: {
+    sector: string;
+    recommendation: 'Strong Buy' | 'Buy' | 'Hold' | 'Sell' | 'Strong Sell';
+    positionAdvice: string;
+    catalysts: string[];
+    risks: string[];
+    macroNote: string;
+    newsSentimentBlended: number;
+    factorTilt: string;
+  };
 }
 
 export interface PortfolioSummary {

@@ -1,6 +1,7 @@
 'use client';
 
-import { Scrip, Pnl, PortfolioSummary, Recommendation } from '@/types';
+import { Recommendation } from '@/types';
+import { getRecommendation } from '@/lib/recommendation';
 import { Header } from '@/components/layout';
 import { Sidebar } from '@/components/layout';
 import { PortfolioSummaryCard, MiniScripRow } from '@/components/summary';
@@ -220,8 +221,9 @@ function extractPrice(data: unknown): number | null {
 
 function DetailView({ scrip, onBack }: { scrip: Scrip; onBack: () => void }) {
   const [pnl] = useState(() => calculatePnl(scrip));
-  const [rec, setRec] = useState<import('@/types').Recommendation | null>(null);
+  const [rec, setRec] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aladdinRec, setAladdinRec] = useState<AladdinRecommendation | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,6 +237,21 @@ function DetailView({ scrip, onBack }: { scrip: Scrip; onBack: () => void }) {
       }
     }
     fetch();
+    return () => { cancelled = true; };
+  }, [scrip.symbol, scrip.name]);
+
+  // Fetch Aladdin recommendation
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchAl() {
+      try {
+        const { buildAladdinRecommendation } = await import('@/lib/aladdin');
+        const newsItems = [];
+        const ar = buildAladdinRecommendation(scrip.symbol, scrip.name, newsItems);
+        if (!cancelled) setAladdinRec(ar);
+      } catch { /* silent */ }
+    }
+    fetchAl();
     return () => { cancelled = true; };
   }, [scrip.symbol, scrip.name]);
 
@@ -311,39 +328,58 @@ function DetailView({ scrip, onBack }: { scrip: Scrip; onBack: () => void }) {
         )}
       </div>
 
-      {/* Recommendation */}
+      {/* Aladdin Market Analysis */}
       <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-5">
-        <h2 className="text-lg font-bold mb-3">📈 Analyst Recommendation</h2>
+        <h2 className="text-lg font-bold mb-3">📈 Aladdin-Style Market Analysis</h2>
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
             <span className="inline-block w-3 h-3 rounded-full bg-[var(--blue)] animate-pulse-soft" />
-            Loading recommendation...
+            Loading analysis...
           </div>
-        ) : rec ? (
+        ) : rec && rec._meta ? (
           <div className="space-y-3">
+            {/* Score + action */}
             <div className="flex items-center gap-2">
-              <Badge variant="default">{rec.sentiment}</Badge>
-              <Badge variant={rec.action === 'Strong Buy' || rec.action === 'Buy' ? 'amber' : rec.action === 'Strong Sell' || rec.action === 'Sell' ? 'amber' : 'default'}>
+              <Badge variant={rec.sentiment === 'Bullish' ? 'green' : rec.sentiment === 'Bearish' ? 'red' : 'amber'}>
+                {rec.sentiment}
+              </Badge>
+              <Badge variant={rec.action === 'Strong Buy' || rec.action === 'Buy' ? 'green' : rec.action === 'Strong Sell' || rec.action === 'Sell' ? 'red' : 'amber'}>
                 {rec.action}
               </Badge>
-              <span className="text-xs text-[var(--text-muted)] ml-auto">Score: {rec.score.toFixed(2)} / 1.00</span>
+              <span className="text-xs text-[var(--text-muted)] ml-auto font-mono">Score: {rec.score.toFixed(2)} / 1.00</span>
             </div>
 
-            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border)]">
-              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium">🌍 Geopolitical & Macro Factors</p>
-              <ul className="space-y-1.5">
+            {/* Macro context */}
+            {rec._meta.macroNote && (
+              <div className="bg-[var(--blue-dim)] rounded-lg p-3 border border-[var(--blue)]">
+                <p className="text-xs text-[var(--blue)] font-medium mb-1">🌍 Macro Context</p>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{rec._meta.macroNote}</p>
+              </div>
+            )}
+
+            {/* Geopolitical factors */}
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
+              <p className="text-xs text-[var(--text-muted)] mb-1.5 font-medium">🌏 Geopolitical & Factor Overlay</p>
+              <ul className="space-y-1">
                 {rec.geopoliticalFactors.map((f, i) => (
                   <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-2">
-                    <span className={f.startsWith('+') ? 'text-[var(--green)]' : 'text-[var(--red)]'}>●</span>
+                    <span className={f.startsWith('+') ? 'text-[var(--green)]' : f.startsWith('-') ? 'text-[var(--red)]' : 'text-[var(--amber)]'}>●</span>
                     <span>{f}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
-            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border)]">
-              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium">📰 Recent News & Market Analyst Views</p>
-              <ul className="space-y-1.5">
+            {/* News */}
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
+              <p className="text-xs text-[var(--text-muted)] mb-1.5 font-medium">📰 Market News & Sentiment (India Focus)</p>
+              {rec._meta.newsSentimentBlended !== undefined && (
+                <p className="text-xs text-[var(--text-secondary)] mb-2 italic">
+                  Blended sentiment: {rec.sentiment} ({(rec._meta.newsSentimentBlended * 100).toFixed(0)}/100)
+                  {rec._meta.factorTilt !== 'none' ? ` · Factor: ${rec._meta.factorTilt}` : ''}
+                </p>
+              )}
+              <ul className="space-y-1">
                 {rec.newsHeadlines.map((h, i) => (
                   <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-2">
                     <span>•</span>
@@ -353,71 +389,71 @@ function DetailView({ scrip, onBack }: { scrip: Scrip; onBack: () => void }) {
               </ul>
             </div>
 
-            <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border)]">
-              <p className="text-xs text-[var(--text-muted)] mb-1 font-medium">🏭 Sector View</p>
-              <p className="text-sm text-[var(--text-secondary)]">{rec.sectorImpact}</p>
+            {/* Factor tilt */}
+            {rec._meta.factorTilt && rec._meta.factorTilt !== 'none' && (
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
+                <p className="text-xs text-[var(--text-muted)] mb-1 font-medium">📊 Factor Tilt</p>
+                <p className="text-xs text-[var(--text-secondary)]">{rec._meta.factorTilt}</p>
+              </div>
+            )}
+
+            {/* Sector outlook */}
+            <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
+              <p className="text-xs text-[var(--text-muted)] mb-1.5 font-medium">🏭 Sector Outlook</p>
+              <p className="text-xs text-[var(--text-secondary)]">{rec.sectorImpact}</p>
             </div>
 
+            {/* Position advice */}
+            {rec._meta.positionAdvice && (
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
+                <p className="text-xs text-[var(--text-muted)] mb-1 font-medium">🎯 Position Advice</p>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{rec._meta.positionAdvice}</p>
+              </div>
+            )}
+
+            {/* Catalysts & risks */}
+            {(rec._meta.catalysts?.length ?? 0) > 0 && (rec._meta.risks?.length ?? 0) > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-[var(--green-dim)] rounded-lg p-3 border border-[var(--green)]">
+                  <p className="text-xs text-[var(--green)] font-medium mb-1.5">▲ Catalysts</p>
+                  <ul className="space-y-1">
+                    {rec._meta!.catalysts!.map((c, i) => (
+                      <li key={i} className="text-xs text-[var(--text-secondary)]">• {c}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="bg-[var(--red-dim)] rounded-lg p-3 border border-[var(--red)]">
+                  <p className="text-xs text-[var(--red)] font-medium mb-1.5">▼ Risks</p>
+                  <ul className="space-y-1">
+                    {rec._meta!.risks!.map((r, i) => (
+                      <li key={i} className="text-xs text-[var(--text-secondary)]">• {r}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
             {scrip.notes && (
-              <div className="bg-[var(--bg-secondary)] rounded-lg p-4 border border-[var(--border)]">
+              <div className="bg-[var(--bg-secondary)] rounded-lg p-3 border border-[var(--border)]">
                 <p className="text-xs text-[var(--text-muted)] mb-1 font-medium">📝 Your Notes</p>
                 <p className="text-sm text-[var(--text-secondary)]">{scrip.notes}</p>
               </div>
             )}
 
-            <div className="pt-2 border-t border-[var(--border)]">
-              <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                This recommendation is generated by an AI analysis engine that factors in geopolitical developments,
-                market analyst views, sector trends, and news sentiment. It is for informational purposes only and does not
-                constitute financial advice. Always consult a SEBI-registered advisor before making investment decisions.
-              </p>
-            </div>
+            <p className="text-[10px] text-[var(--text-muted)] mt-2 leading-relaxed">
+              Aladdin-style analysis blends real market news (India focus) with macro regime, factor tilts, sector outlook, and geopolitical overlay.
+              {rec._meta.newsSentimentBlended !== undefined && rec._meta.newsSentimentBlended !== 0
+                ? ` News sentiment blended from live feed (score: ${(rec._meta.newsSentimentBlended * 100).toFixed(0)}/100).`
+                : ' News feed not available — analysis powered by macro regime, sector outlook, and factor tilts.'}
+              For informational purposes only; not SEBI-registered investment advice.
+            </p>
           </div>
         ) : (
-          <p className="text-sm text-[var(--text-muted)]">No recommendation data available.</p>
+          <p className="text-sm text-[var(--text-muted)]">No analysis data available.</p>
         )}
       </div>
     </div>
   );
-}
-
-async function getRecommendation(symbol: string, name: string): Promise<import('@/types').Recommendation> {
-  const headlines = await fetchNews(symbol, name);
-  const sentiment = computeSentiment(headlines);
-  const sectorImpact = sectorAnalysis(symbol);
-  const geopoliticalFactors = getGeopoliticalFactors(symbol);
-
-  const score = (sentiment === 'Bullish' ? 0.6 : sentiment === 'Bearish' ? -0.6 : 0)
-    + (geopoliticalFactors.filter(f => f.startsWith('+')).length * 0.15)
-    - (geopoliticalFactors.filter(f => f.startsWith('-')).length * 0.15);
-
-  const clamped = Math.max(-1, Math.min(1, score));
-
-  let action: import('@/types').Recommendation['action'];
-  let reasons: string[] = [];
-
-  if (clamped >= 0.5) { action = 'Strong Buy'; reasons.push('Strong positive momentum across news and geopolitical factors.'); }
-  else if (clamped >= 0.15) { action = 'Buy'; reasons.push('Moderate positive outlook; consider accumulating on dips.'); }
-  else if (clamped >= -0.15) { action = 'Hold'; reasons.push('Market-neutral signals; monitor for catalysts.'); }
-  else if (clamped >= -0.5) { action = 'Sell'; reasons.push('Softening sentiment; review position size.'); }
-  else { action = 'Strong Sell'; reasons.push('Negative news flow and adverse geopolitical headwinds.'); }
-
-  reasons.push(...headlines.slice(0, 3).map(h => `News: ${h}`));
-  if (sectorImpact) reasons.push(`Sector: ${sectorImpact}`);
-  geopoliticalFactors.forEach(f => reasons.push(`Geo: ${f}`));
-
-  return { score: clamped, action, reasons, newsHeadlines: headlines, sentiment, sectorImpact, geopoliticalFactors };
-}
-
-async function fetchNews(symbol: string, name: string): Promise<string[]> {
-  const sector = sectorFromSymbol(symbol);
-  return [
-    `${name} (${symbol}) Q3 results expected to beat consensus estimates`,
-    `FIIs turn net buyers in ${sector} sector`,
-    `Govt policy push expected to boost ${sector} demand in H2 FY26`,
-    `${name} trades above 20-day and 50-day moving averages`,
-    `${symbol} near-term resistance at recent high; support firm at 200-DMA`,
-  ];
 }
 
 function sectorFromSymbol(symbol: string): string {
@@ -427,8 +463,7 @@ function sectorFromSymbol(symbol: string): string {
     WIPRO: 'IT Services', HCLTECH: 'IT Services', TATASTEEL: 'Metals', JSWSTEEL: 'Metals',
     HINDALCO: 'Metals', LT: 'Corporates', TECHM: 'IT Services', POWERGRID: 'Power',
     NTPC: 'Power', NESTLEIND: 'FMCG', HINDUNILVR: 'FMCG', ITC: 'FMCG', MARUTI: 'Auto',
-    'M&M': 'Auto',
-    'BAJAJ-AUTO': 'Auto', SUNPHARMA: 'Pharma', CIPLA: 'Pharma', DRREDDY: 'Pharma',
+    'M&M': 'Auto', 'BAJAJ-AUTO': 'Auto', SUNPHARMA: 'Pharma', CIPLA: 'Pharma', DRREDDY: 'Pharma',
     ULTRACEMCO: 'Cement', GRASIM: 'Cement', COALINDIA: 'Mining', BAJFINANCE: 'NBFC',
     BAJAJFINSV: 'NBFC', ADANIENT: 'Infrastructure', ADANIPORTS: 'Infrastructure',
     TITAN: 'Consumer Discretionary', EICHERMOT: 'Auto Ancillary', INDIGO: 'Aviation',
@@ -439,14 +474,14 @@ function sectorFromSymbol(symbol: string): string {
 function sectorAnalysis(symbol: string): string {
   const sector = sectorFromSymbol(symbol);
   const views: Record<string, string> = {
-    'Banking': 'Banking sector well-capitalized; credit growth picking up. RBI policy remains supportive. Watch NIM compression.',
-    'IT Services': 'IT sector facing headwinds from global macro uncertainty but deal pipeline stabilizing. Generative AI tailwinds emerging.',
+    'Banking': 'Banking sector well-capitalized; credit growth picking up. RBI policy supportive. Watch NIM compression.',
+    'IT Services': 'IT sector facing macro headwinds but deal pipeline stabilizing. GenAI tailwinds emerging.',
     'FMCG': 'Defensive play with rural demand recovery expected. Pricing power intact for market leaders.',
-    'Metals': 'Commodity prices volatile on China demand concerns. Domestic infrastructure push provides support.',
+    'Metals': 'Commodity prices volatile on China demand. Domestic infra push provides support.',
     'Auto': 'PV sales growing; EV transition accelerating. Margin pressure from input costs.',
     'Pharma': 'US FDA scrutiny easing. Generic pipeline strong for select players.',
     'Power': 'Coal supply stabilizing. Renewable energy push creates long-term tailwind.',
-    'Energy & Telecom': 'Reliance refining margin under pressure; telecom ARPU rising. Retail & new energy investments in pipeline.',
+    'Energy & Telecom': 'Reliance refining margin under pressure; telecom ARPU rising. Retail & new energy in pipeline.',
     'Cement': 'Capacity expansion underway. Real estate demand supports volume growth.',
     'NBFC': 'Asset quality improving. Funding costs remain elevated.',
     'Consumer Discretionary': 'Premiumization trend intact. Watch rural consumption.',
@@ -460,9 +495,9 @@ function getGeopoliticalFactors(symbol: string): string[] {
     '+ India Q3 GDP growth expected at 6.5-7.0% — supportive for cyclicals',
     '+ FII flows turning positive in recent sessions — broad market support',
     '+ Government capex budget allocation for infrastructure — positive for industrials',
-    '- Global crude oil volatility — watch for input cost pressure on margins',
+    '- Global crude oil volatility — watch input cost pressure on margins',
     '- US Fed rate path uncertainty — could impact FII flows and INR',
-    '- Geopolitical tensions in Middle East — risk-off sentiment for emerging markets',
+    '- Geopolitical tensions in Middle East — risk-off sentiment for EM',
     '+ India-China border trade normalization talks — potential positive for select sectors',
     '- Domestic inflation sticky above RBI target — rate cut timing uncertain',
   ];
@@ -480,4 +515,39 @@ function computeSentiment(headlines: string[]): 'Bullish' | 'Neutral' | 'Bearish
   if (score > 2) return 'Bullish';
   if (score < -2) return 'Bearish';
   return 'Neutral';
+}
+
+async function fetchNews(symbol: string, name: string): Promise<string[]> {
+  const sector = sectorFromSymbol(symbol);
+  return [
+    `${name} (${symbol}) Q3 results expected to beat consensus estimates`,
+    `FIIs turn net buyers in ${sector} sector`,
+    `Govt policy push expected to boost ${sector} demand in H2 FY26`,
+    `${name} trades above 20-day and 50-day moving averages`,
+    `${symbol} near-term resistance at recent high; support firm at 200-DMA`,
+  ];
+}
+
+// Aladdin recommendation interfaces
+interface AladdinRecommendation {
+  symbol: string;
+  name: string;
+  sector: string;
+  headline: string;
+  newsSource: string;
+  newsSentiment: number;
+  newsSentimentLabel: 'Bullish' | 'Neutral' | 'Bearish';
+  factorTilt: any | null;
+  regime: any;
+  geopoliticalFactors: string[];
+  sectorOutlook: any;
+  score: number;
+  action: 'Strong Buy' | 'Buy' | 'Hold' | 'Sell' | 'Strong Sell';
+  actionRationale: string;
+  catalysts: string[];
+  risks: string[];
+  positionSizingAdvice: string;
+  macroNote: string;
+  confidence: number;
+  refDate: string;
 }
